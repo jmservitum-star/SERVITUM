@@ -84,3 +84,48 @@ renderWorkAgenda = function(){
   $('agendaNextFull').innerHTML=next.map(x=>agendaTask(x,'next')).join('')||'<p class="muted">No hay seguimientos en los próximos 7 días.</p>';
   $('agendaRecoverFull').innerHTML=recover.map(x=>agendaTask(x,'recover')).join('')||'<p class="muted">No hay clientes para recuperar.</p>';
 };
+
+
+// Asistente de clientes existentes: evita crear el mismo cliente por diferencias de escritura.
+(function(){
+  function latestClients(){
+    const map={};
+    (visits||[]).forEach(v=>{
+      const k=clientKey(v); if(!k)return;
+      const t=v.updated_at?new Date(v.updated_at):localDate(v.visit_date);
+      if(!map[k]||t>map[k].t)map[k]={v,t};
+    });
+    return map;
+  }
+  function refreshClientSuggestions(){
+    const input=document.getElementById('empresa'); if(!input)return;
+    let list=document.getElementById('clientesExistentes');
+    if(!list){list=document.createElement('datalist');list.id='clientesExistentes';document.body.appendChild(list);input.setAttribute('list','clientesExistentes');input.setAttribute('autocomplete','off');}
+    const clients=Object.values(latestClients()).sort((a,b)=>String(a.v.company||'').localeCompare(String(b.v.company||''),'es'));
+    list.innerHTML=clients.map(x=>'<option value="'+esc(x.v.company)+'"></option>').join('');
+  }
+  function matchExistingClient(){
+    const input=document.getElementById('empresa'); if(!input||!input.value.trim())return;
+    const k=normalizeClientName(input.value),hit=latestClients()[k]; if(!hit)return;
+    const v=hit.v;
+    input.value=v.company||input.value;
+    const setBlank=(id,val)=>{const el=document.getElementById(id);if(el&&!el.value&&val)el.value=val};
+    setBlank('direccion',v.address);setBlank('telefono',v.phone);setBlank('whatsapp',v.whatsapp);setBlank('correoCliente',v.customer_email);setBlank('encargado',v.buyer);
+    const zona=document.getElementById('zona');
+    if(zona&&!zona.value&&v.zone){
+      const exists=[...zona.options].some(o=>o.value===v.zone);
+      zona.value=exists?v.zone:'Otra zona';
+      if(!exists){const zo=document.getElementById('zonaOtra');if(zo)zo.value=v.zone}
+      if(typeof toggleZona==='function')toggleZona();
+    }
+  }
+  const oldLoad=load;
+  load=async function(){const result=await oldLoad.apply(this,arguments);refreshClientSuggestions();return result};
+  document.addEventListener('DOMContentLoaded',()=>{
+    const input=document.getElementById('empresa');if(!input)return;
+    refreshClientSuggestions();
+    input.addEventListener('change',matchExistingClient);
+    input.addEventListener('blur',matchExistingClient);
+  });
+  document.addEventListener('submit',e=>{if(e.target&&e.target.id==='visitForm')matchExistingClient()},true);
+})();
