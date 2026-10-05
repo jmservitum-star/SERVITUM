@@ -235,3 +235,43 @@ renderWorkAgenda = function(){
     cell.appendChild(box);
   };
 })();
+
+
+// Auditoría avanzada compatible con el esquema actual.
+// Para registros nuevos conserva en el navegador el creador y la primera fecha conocida;
+// la última modificación y el usuario actual se muestran desde los datos reales disponibles.
+(function(){
+  const AUDIT_KEY='servitum_visit_audit_v1';
+  function readAudit(){try{return JSON.parse(localStorage.getItem(AUDIT_KEY)||'{}')}catch(e){return {}}}
+  function writeAudit(x){try{localStorage.setItem(AUDIT_KEY,JSON.stringify(x))}catch(e){}}
+  function rememberAudit(){
+    const a=readAudit(),now=new Date().toISOString(),who=profile?.full_name||me?.email||'Usuario';
+    (visits||[]).forEach(v=>{
+      if(!a[v.id])a[v.id]={created_at:v.updated_at||now,created_by:who};
+      if(v.modified){a[v.id].updated_at=v.updated_at||now;a[v.id].updated_by=who}
+    });
+    writeAudit(a);
+  }
+  const oldLoadAudit=load;
+  load=async function(){const result=await oldLoadAudit.apply(this,arguments);rememberAudit();return result};
+
+  const oldOpenClientProfileAudit=window.openClientProfile;
+  window.openClientProfile=function(id){
+    oldOpenClientProfileAudit(id);
+    const seed=(visits||[]).find(v=>v.id===id);if(!seed)return;
+    const rows=(visits||[]).filter(v=>clientKey(v)===clientKey(seed)).sort((a,b)=>{
+      const ta=a.updated_at?new Date(a.updated_at):localDate(a.visit_date),tb=b.updated_at?new Date(b.updated_at):localDate(b.visit_date);return tb-ta;
+    });
+    const audit=readAudit(),table=document.querySelector('#clientProfileBody table');if(!table)return;
+    const head=table.querySelector('thead tr');
+    if(head&&!head.querySelector('.audit-who')){const th=document.createElement('th');th.className='audit-who';th.textContent='Auditoría';head.insertBefore(th,head.lastElementChild)}
+    table.querySelectorAll('tbody tr').forEach((tr,i)=>{
+      if(!rows[i]||tr.querySelector('.audit-who'))return;
+      const a=audit[rows[i].id]||{},td=document.createElement('td');td.className='audit-who';
+      const created=a.created_at?formatVisitAuditDate(a.created_at):'No disponible';
+      const modified=rows[i].modified?formatVisitAuditDate(rows[i].updated_at):'—';
+      td.innerHTML='<small><b>Creado:</b> '+esc(created)+'<br><b>Por:</b> '+esc(a.created_by||rows[i].profiles?.full_name||'No disponible')+'<br><b>Modificado:</b> '+esc(modified)+(rows[i].modified?'<br><b>Último usuario:</b> '+esc(a.updated_by||'Usuario actual'):'')+'</small>';
+      tr.insertBefore(td,tr.lastElementChild);
+    });
+  };
+})();
