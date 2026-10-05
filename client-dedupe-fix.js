@@ -190,39 +190,38 @@ renderWorkAgenda = function(){
 })();
 
 
-// Control visible de fecha y hora de registro / modificación.
-// Usa updated_at, que ya se guarda automáticamente en cada alta y edición.
+// Auditoría permanente de visitas respaldada por Supabase.
 (function(){
   function fmtAuditDate(value){
     if(!value)return '—';
     const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
     return new Intl.DateTimeFormat('es-DO',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).format(d);
   }
+  function auditUser(v,kind){
+    const rel=kind==='created'?v.creator:v.updater;
+    return rel?.full_name||v.profiles?.full_name||'No disponible';
+  }
   window.formatVisitAuditDate=fmtAuditDate;
 
-  // Amplía la ficha del cliente para mostrar la hora exacta de cada registro o modificación.
   const oldOpenClientProfile=window.openClientProfile;
   window.openClientProfile=function(id){
     oldOpenClientProfile(id);
     const seed=(visits||[]).find(v=>v.id===id);if(!seed)return;
-    const key=clientKey(seed);
-    const rows=(visits||[]).filter(v=>clientKey(v)===key).sort((a,b)=>{
+    const rows=(visits||[]).filter(v=>clientKey(v)===clientKey(seed)).sort((a,b)=>{
       const ta=a.updated_at?new Date(a.updated_at):localDate(a.visit_date),tb=b.updated_at?new Date(b.updated_at):localDate(b.visit_date);return tb-ta;
     });
-    const body=document.getElementById('clientProfileBody');if(!body)return;
-    const table=body.querySelector('table');if(!table)return;
+    const table=document.querySelector('#clientProfileBody table');if(!table)return;
     const head=table.querySelector('thead tr');
-    if(head&&!head.querySelector('.audit-col')){const th=document.createElement('th');th.className='audit-col';th.textContent='Registrado / modificado';head.insertBefore(th,head.lastElementChild)}
-    const trs=table.querySelectorAll('tbody tr');
-    trs.forEach((tr,i)=>{
+    if(head&&!head.querySelector('.audit-col')){const th=document.createElement('th');th.className='audit-col';th.textContent='Auditoría';head.insertBefore(th,head.lastElementChild)}
+    table.querySelectorAll('tbody tr').forEach((tr,i)=>{
       if(!rows[i]||tr.querySelector('.audit-col'))return;
-      const td=document.createElement('td');td.className='audit-col';
-      td.innerHTML='<b>'+(rows[i].modified?'Modificado':'Registrado')+'</b><br><small>'+esc(fmtAuditDate(rows[i].updated_at))+'</small>';
+      const v=rows[i],td=document.createElement('td');td.className='audit-col';
+      td.innerHTML='<small><b>Creado:</b> '+esc(fmtAuditDate(v.created_at))+'<br><b>Por:</b> '+esc(auditUser(v,'created'))+
+        (v.modified?'<br><b>Modificado:</b> '+esc(fmtAuditDate(v.updated_at))+'<br><b>Por:</b> '+esc(auditUser(v,'updated')):'')+'</small>';
       tr.insertBefore(td,tr.lastElementChild);
     });
   };
 
-  // Añade fecha/hora al detalle expandido del historial, sin cambiar la tabla principal.
   const oldToggleDetail=window.toggleDetail;
   window.toggleDetail=function(id){
     oldToggleDetail(id);
@@ -231,47 +230,8 @@ renderWorkAgenda = function(){
     const cell=row.querySelector('td');if(!cell||cell.querySelector('.visit-audit'))return;
     const box=document.createElement('div');box.className='visit-audit';
     box.style.cssText='margin-top:12px;padding-top:10px;border-top:1px solid #dbe3ea;font-size:13px';
-    box.innerHTML='<b>Control del registro:</b> '+(v.modified?'Última modificación':'Registrado')+' · '+esc(fmtAuditDate(v.updated_at));
+    box.innerHTML='<b>Auditoría del registro</b><br>Creado: '+esc(fmtAuditDate(v.created_at))+' · '+esc(auditUser(v,'created'))+
+      (v.modified?'<br>Última modificación: '+esc(fmtAuditDate(v.updated_at))+' · '+esc(auditUser(v,'updated')):'');
     cell.appendChild(box);
-  };
-})();
-
-
-// Auditoría avanzada compatible con el esquema actual.
-// Para registros nuevos conserva en el navegador el creador y la primera fecha conocida;
-// la última modificación y el usuario actual se muestran desde los datos reales disponibles.
-(function(){
-  const AUDIT_KEY='servitum_visit_audit_v1';
-  function readAudit(){try{return JSON.parse(localStorage.getItem(AUDIT_KEY)||'{}')}catch(e){return {}}}
-  function writeAudit(x){try{localStorage.setItem(AUDIT_KEY,JSON.stringify(x))}catch(e){}}
-  function rememberAudit(){
-    const a=readAudit(),now=new Date().toISOString(),who=profile?.full_name||me?.email||'Usuario';
-    (visits||[]).forEach(v=>{
-      if(!a[v.id])a[v.id]={created_at:v.updated_at||now,created_by:who};
-      if(v.modified){a[v.id].updated_at=v.updated_at||now;a[v.id].updated_by=who}
-    });
-    writeAudit(a);
-  }
-  const oldLoadAudit=load;
-  load=async function(){const result=await oldLoadAudit.apply(this,arguments);rememberAudit();return result};
-
-  const oldOpenClientProfileAudit=window.openClientProfile;
-  window.openClientProfile=function(id){
-    oldOpenClientProfileAudit(id);
-    const seed=(visits||[]).find(v=>v.id===id);if(!seed)return;
-    const rows=(visits||[]).filter(v=>clientKey(v)===clientKey(seed)).sort((a,b)=>{
-      const ta=a.updated_at?new Date(a.updated_at):localDate(a.visit_date),tb=b.updated_at?new Date(b.updated_at):localDate(b.visit_date);return tb-ta;
-    });
-    const audit=readAudit(),table=document.querySelector('#clientProfileBody table');if(!table)return;
-    const head=table.querySelector('thead tr');
-    if(head&&!head.querySelector('.audit-who')){const th=document.createElement('th');th.className='audit-who';th.textContent='Auditoría';head.insertBefore(th,head.lastElementChild)}
-    table.querySelectorAll('tbody tr').forEach((tr,i)=>{
-      if(!rows[i]||tr.querySelector('.audit-who'))return;
-      const a=audit[rows[i].id]||{},td=document.createElement('td');td.className='audit-who';
-      const created=a.created_at?formatVisitAuditDate(a.created_at):'No disponible';
-      const modified=rows[i].modified?formatVisitAuditDate(rows[i].updated_at):'—';
-      td.innerHTML='<small><b>Creado:</b> '+esc(created)+'<br><b>Por:</b> '+esc(a.created_by||rows[i].profiles?.full_name||'No disponible')+'<br><b>Modificado:</b> '+esc(modified)+(rows[i].modified?'<br><b>Último usuario:</b> '+esc(a.updated_by||'Usuario actual'):'')+'</small>';
-      tr.insertBefore(td,tr.lastElementChild);
-    });
   };
 })();
