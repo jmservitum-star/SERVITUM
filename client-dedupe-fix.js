@@ -129,3 +129,62 @@ renderWorkAgenda = function(){
   });
   document.addEventListener('submit',e=>{if(e.target&&e.target.id==='visitForm')matchExistingClient()},true);
 })();
+
+
+// Ficha única del cliente: resumen comercial + historial completo de visitas.
+(function(){
+  function ensureClientModal(){
+    if(document.getElementById('clientProfileModal'))return;
+    const modal=document.createElement('div');
+    modal.id='clientProfileModal';modal.className='modal';modal.style.display='none';
+    modal.innerHTML='<div class="modal-card perf-card"><div class="modal-head"><div><h2 id="clientProfileTitle">Ficha del cliente</h2><p id="clientProfileSubtitle" class="muted"></p></div><button type="button" onclick="closeClientProfile()">Cerrar</button></div><div id="clientProfileBody"></div></div>';
+    document.body.appendChild(modal);
+  }
+  function clientRows(key){
+    return (visits||[]).filter(v=>clientKey(v)===key).sort((a,b)=>{
+      const ta=a.updated_at?new Date(a.updated_at):localDate(a.visit_date),tb=b.updated_at?new Date(b.updated_at):localDate(b.visit_date);
+      return tb-ta;
+    });
+  }
+  window.closeClientProfile=()=>{const m=document.getElementById('clientProfileModal');if(m)m.style.display='none'};
+  window.openClientProfile=function(id){
+    ensureClientModal();
+    const seed=(visits||[]).find(v=>v.id===id);if(!seed)return;
+    const rows=clientRows(clientKey(seed));if(!rows.length)return;
+    const latest=rows[0],first=[...rows].sort((a,b)=>String(a.visit_date).localeCompare(String(b.visit_date)))[0];
+    const seller=latest.profiles?.full_name||profile?.full_name||'Vendedor';
+    const contact=[latest.buyer,latest.phone,latest.whatsapp,latest.customer_email].filter(Boolean).map(esc).join(' · ')||'Sin datos de contacto';
+    document.getElementById('clientProfileTitle').textContent=latest.company||'Cliente';
+    document.getElementById('clientProfileSubtitle').textContent=(latest.zone||'Sin zona')+' · '+seller;
+    const history=rows.map(v=>'<tr><td>'+esc(v.visit_date)+'</td><td>'+esc(v.profiles?.full_name||seller)+'</td><td>'+esc(v.reason||'')+'</td><td>'+esc(v.result||'')+'</td><td>'+esc(v.commercial_stage||'Prospecto')+'</td><td>'+esc(v.followup_date||'—')+'</td><td><button class="secondary" onclick="closeClientProfile();editVisit(\''+v.id+'\')">Abrir</button></td></tr>').join('');
+    document.getElementById('clientProfileBody').innerHTML=
+      '<div class="perf-kpis">'+
+      '<div class="perf-kpi"><b>'+rows.length+'</b><span>Visitas registradas</span></div>'+
+      '<div class="perf-kpi"><b>'+esc(latest.visit_date||'—')+'</b><span>Última visita</span></div>'+
+      '<div class="perf-kpi"><b>'+esc(latest.followup_date||'—')+'</b><span>Próximo seguimiento</span></div>'+
+      '<div class="perf-kpi"><b>'+esc(latest.commercial_stage||'Prospecto')+'</b><span>Etapa comercial</span></div>'+
+      '</div>'+
+      '<div class="perf-section"><h3>Información del cliente</h3><p><b>Dirección:</b> '+esc(latest.address||'No registrada')+'<br><b>Contacto:</b> '+contact+'<br><b>Primera visita:</b> '+esc(first.visit_date||'—')+'<br><b>Último próximo paso:</b> '+esc(latest.next_step||'No registrado')+'</p></div>'+
+      '<div class="perf-section"><h3>Historial de visitas</h3><div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Vendedor</th><th>Motivo</th><th>Resultado</th><th>Etapa</th><th>Seguimiento</th><th>Acción</th></tr></thead><tbody>'+history+'</tbody></table></div></div>'+
+      '<div class="perf-section"><button class="primary" onclick="closeClientProfile();repeatVisit(\''+latest.id+'\')">Registrar nueva visita</button></div>';
+    document.getElementById('clientProfileModal').style.display='block';
+  };
+  ensureClientModal();
+
+  // Añade acceso a la ficha desde las tarjetas de agenda sin eliminar acciones existentes.
+  const oldAgendaTask=agendaTask;
+  agendaTask=function(x,type){
+    const html=oldAgendaTask(x,type),v=x.v||x;
+    return html.replace('<div class="task-actions">','<div class="task-actions"><button class="secondary" onclick="openClientProfile(\''+v.id+'\')">Ficha cliente</button>');
+  };
+
+  // Añade acceso a la ficha desde cada cliente del embudo.
+  const oldOpenFunnelStage=window.openFunnelStage;
+  window.openFunnelStage=function(stage){
+    oldOpenFunnelStage(stage);
+    const body=document.getElementById('funnelModalBody');if(!body)return;
+    const clients=Object.values(funnelLatest).filter(x=>(x.v.commercial_stage||'Prospecto')===stage).sort((a,b)=>String(a.v.company).localeCompare(String(b.v.company)));
+    const buttons=body.querySelectorAll('.client-stage-row');
+    buttons.forEach((row,i)=>{if(clients[i]&&!row.querySelector('.client-profile-btn')){const box=row.lastElementChild;if(box){const b=document.createElement('button');b.className='secondary client-profile-btn';b.style.marginLeft='6px';b.textContent='Ficha';b.onclick=()=>{closeFunnelModal();openClientProfile(clients[i].v.id)};box.appendChild(b)}}});
+  };
+})();
