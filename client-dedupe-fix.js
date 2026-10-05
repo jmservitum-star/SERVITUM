@@ -188,3 +188,50 @@ renderWorkAgenda = function(){
     buttons.forEach((row,i)=>{if(clients[i]&&!row.querySelector('.client-profile-btn')){const box=row.lastElementChild;if(box){const b=document.createElement('button');b.className='secondary client-profile-btn';b.style.marginLeft='6px';b.textContent='Ficha';b.onclick=()=>{closeFunnelModal();openClientProfile(clients[i].v.id)};box.appendChild(b)}}});
   };
 })();
+
+
+// Control visible de fecha y hora de registro / modificación.
+// Usa updated_at, que ya se guarda automáticamente en cada alta y edición.
+(function(){
+  function fmtAuditDate(value){
+    if(!value)return '—';
+    const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+    return new Intl.DateTimeFormat('es-DO',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).format(d);
+  }
+  window.formatVisitAuditDate=fmtAuditDate;
+
+  // Amplía la ficha del cliente para mostrar la hora exacta de cada registro o modificación.
+  const oldOpenClientProfile=window.openClientProfile;
+  window.openClientProfile=function(id){
+    oldOpenClientProfile(id);
+    const seed=(visits||[]).find(v=>v.id===id);if(!seed)return;
+    const key=clientKey(seed);
+    const rows=(visits||[]).filter(v=>clientKey(v)===key).sort((a,b)=>{
+      const ta=a.updated_at?new Date(a.updated_at):localDate(a.visit_date),tb=b.updated_at?new Date(b.updated_at):localDate(b.visit_date);return tb-ta;
+    });
+    const body=document.getElementById('clientProfileBody');if(!body)return;
+    const table=body.querySelector('table');if(!table)return;
+    const head=table.querySelector('thead tr');
+    if(head&&!head.querySelector('.audit-col')){const th=document.createElement('th');th.className='audit-col';th.textContent='Registrado / modificado';head.insertBefore(th,head.lastElementChild)}
+    const trs=table.querySelectorAll('tbody tr');
+    trs.forEach((tr,i)=>{
+      if(!rows[i]||tr.querySelector('.audit-col'))return;
+      const td=document.createElement('td');td.className='audit-col';
+      td.innerHTML='<b>'+(rows[i].modified?'Modificado':'Registrado')+'</b><br><small>'+esc(fmtAuditDate(rows[i].updated_at))+'</small>';
+      tr.insertBefore(td,tr.lastElementChild);
+    });
+  };
+
+  // Añade fecha/hora al detalle expandido del historial, sin cambiar la tabla principal.
+  const oldToggleDetail=window.toggleDetail;
+  window.toggleDetail=function(id){
+    oldToggleDetail(id);
+    const v=(visits||[]).find(x=>x.id===id),row=document.getElementById('detail_'+id);
+    if(!v||!row)return;
+    const cell=row.querySelector('td');if(!cell||cell.querySelector('.visit-audit'))return;
+    const box=document.createElement('div');box.className='visit-audit';
+    box.style.cssText='margin-top:12px;padding-top:10px;border-top:1px solid #dbe3ea;font-size:13px';
+    box.innerHTML='<b>Control del registro:</b> '+(v.modified?'Última modificación':'Registrado')+' · '+esc(fmtAuditDate(v.updated_at));
+    cell.appendChild(box);
+  };
+})();
