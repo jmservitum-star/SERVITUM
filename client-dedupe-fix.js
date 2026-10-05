@@ -235,3 +235,58 @@ renderWorkAgenda = function(){
     cell.appendChild(box);
   };
 })();
+
+
+// Propietario único del cliente: lectura segura desde public.clients + reasignación solo para administrador.
+(function(){
+  let clientOwners={}, sellerDirectory=[];
+
+  async function loadClientOwners(){
+    const {data,error}=await sb.from('clients').select('id,normalized_name,display_name,owner_id,profiles!clients_owner_id_fkey(full_name)');
+    if(error){console.error('No se pudo cargar propietarios de clientes:',error.message);return}
+    clientOwners={};
+    (data||[]).forEach(x=>clientOwners[x.normalized_name]=x);
+    if(profile?.role==='admin'){
+      const pr=await sb.from('profiles').select('id,full_name,role').eq('role','seller').order('full_name');
+      sellerDirectory=pr.data||[];
+    }
+  }
+  window.getClientOwner=function(v){return clientOwners[clientKey(v)]||null};
+
+  const oldLoadOwners=load;
+  load=async function(){
+    const result=await oldLoadOwners.apply(this,arguments);
+    await loadClientOwners();
+    return result;
+  };
+
+  window.changeClientOwner=async function(clientId,newOwnerId){
+    if(profile?.role!=='admin'||!clientId||!newOwnerId)return;
+    const {error}=await sb.from('clients').update({owner_id:newOwnerId,updated_at:new Date().toISOString()}).eq('id',clientId);
+    if(error){alert('No se pudo reasignar el cliente: '+error.message);return}
+    await loadClientOwners();
+    alert('Vendedor responsable actualizado.');
+    const seed=(visits||[]).find(v=>getClientOwner(v)?.id===clientId);
+    if(seed)openClientProfile(seed.id);
+  };
+
+  const oldOpenClientProfileOwner=window.openClientProfile;
+  window.openClientProfile=function(id){
+    oldOpenClientProfileOwner(id);
+    const v=(visits||[]).find(x=>x.id===id),body=document.getElementById('clientProfileBody');
+    if(!v||!body)return;
+    const owner=getClientOwner(v),ownerName=owner?.profiles?.full_name||v.profiles?.full_name||'Sin asignar';
+    const info=body.querySelector('.perf-section');
+    if(info&&!info.querySelector('.client-owner-box')){
+      const box=document.createElement('div');box.className='client-owner-box';
+      box.style.cssText='margin-top:12px;padding:12px;border:1px solid #dbe9f2;border-radius:9px;background:#f8fbfd';
+      if(profile?.role==='admin'&&owner){
+        const options=sellerDirectory.map(s=>'<option value="'+s.id+'" '+(s.id===owner.owner_id?'selected':'')+'>'+esc(s.full_name)+'</option>').join('');
+        box.innerHTML='<b>Vendedor responsable</b><div style="display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap"><select id="clientOwnerSelect" style="max-width:320px">'+options+'</select><button class="secondary" onclick="changeClientOwner(\''+owner.id+'\',document.getElementById(\'clientOwnerSelect\').value)">Reasignar</button></div>';
+      }else{
+        box.innerHTML='<b>Vendedor responsable:</b> '+esc(ownerName);
+      }
+      info.appendChild(box);
+    }
+  };
+})();
