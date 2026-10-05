@@ -92,4 +92,6 @@ window.openSellerPerformance=id=>{if(profile?.role!=='admin')return;const seller
 window.filterSellerHistory=id=>{const v=visits.find(x=>x.user_id===id);$('search').value=v?.profiles?.full_name||'';render()};
 async function loadUsers(){const {data}=await sb.from('profiles').select('id,full_name,email,role').order('full_name');const sellers=(data||[]).filter(u=>u.role==='seller');$('userList').innerHTML=sellers.map(u=>{const g=goalHistory.find(x=>x.user_id===u.id&&x.week_start===currentWeekKey())||goals.find(x=>x.user_id===u.id)||{};return '<div class="box"><b>'+esc(u.full_name)+'</b> — '+esc(u.email)+'<div class="grid" style="margin-top:12px"><div><label>Meta diaria</label><input id="dg_'+u.id+'" type="number" min="0" value="'+(g.daily_goal||0)+'"></div><div><label>Meta semanal</label><input id="wg_'+u.id+'" type="number" min="0" value="'+(g.weekly_goal||0)+'"></div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="primary" onclick="saveGoal(\''+u.id+'\')">Guardar metas</button><button class="secondary" onclick="openSellerPerformance(\''+u.id+'\')">Ver desempeño</button></div></div>'}).join('')}
 init();
-</script></body></html>
+</script>
+<script src="client-dedupe-fix.js"></script>
+</body></html>
