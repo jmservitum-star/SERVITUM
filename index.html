@@ -46,8 +46,8 @@ label{font-size:12px;font-weight:800;display:block;margin-bottom:5px}input,selec
 <section id="users" class="panel"><div class="box"><h2>Usuarios / Vendedores</h2><p class="muted">Solo el administrador puede ver esta sección. Aquí puede crear vendedores y controlar sus metas.</p><div class="box" style="background:#f7fbfe;border:1px solid #dbe9f2"><h3 style="margin-top:0">Crear vendedor</h3><form id="sellerCreateForm"><div class="grid"><div><label>Nombre completo</label><input id="sellerFullName" required minlength="3" autocomplete="name"></div><div><label>Correo electrónico</label><input id="sellerEmail" type="email" required autocomplete="email"></div><div><label>Contraseña temporal</label><input id="sellerPassword" type="password" required minlength="10" autocomplete="new-password"></div><div style="display:flex;align-items:end"><button id="sellerCreateBtn" class="primary" type="submit">Crear vendedor</button></div></div><p id="sellerCreateMsg" class="muted" style="margin-bottom:0"></p></form></div><div id="userList"></div></div></section>
 </div></div>
 <script>
-const SUPABASE_URL='https://jhbcckjhbqpatvwcmyfc.supabase.co';
-const SUPABASE_ANON_KEY='sb_publishable_pVPvVcPAi51hKybGS-evWA_NgpNJek-';
+const SUPABASE_URL='https://eyyggaphrzsnyrsrlrsr.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_RRFCOT12zgakkcGeGyJvfQ_LY441rvd';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 let me=null, profile=null, visits=[], goals=[], goalHistory=[], editingId=null;
 const toggleZona=()=>{const otra=$('zona').value==='Otra zona';$('zonaOtra').style.display=otra?'block':'none';$('zonaOtra').required=otra;if(!otra)$('zonaOtra').value=''};
